@@ -161,11 +161,11 @@ function App() {
                                             } else if (unpublished) {
                                                 // One of the publishers has unpublished?
                                                 Janus.log("Publisher left: " + unpublished);
-                                                if (unpublished === 'ok') {
-                                                    // That's us
-                                                    sfutest.hangup();
-                                                    return;
-                                                }
+                                                // if (unpublished === 'ok') {
+                                                //     // That's us
+                                                //     sfutest.hangup();
+                                                //     return;
+                                                // }
                                                 let remoteFeed = null;
                                                 for (let i = 1; i < roomCapacity; i++) {
                                                     if (feeds[i] && feeds[i].rfid === unpublished) {
