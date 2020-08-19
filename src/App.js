@@ -278,7 +278,7 @@ function App() {
                     Janus.log('[VideoRoom][Remote] ::: Got a message (publisher) :::', msg, event);
                     if(event === "attached") {
                         // Subscriber created and attached
-                        for(var i=1;i<6;i++) {
+                        for(var i=1;i<roomCapacity;i++) {
                             if(!feeds[i]) {
                                 feeds[i] = remoteFeed;
                                 remoteFeed.rfindex = i;
