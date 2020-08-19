@@ -378,8 +378,8 @@ function App() {
                     )
                 })}
                 <button onClick={() => {
-                    setTemp(true)
-                }}>Get Remote Stream
+                    setTemp(!temp)
+                }}>Fetch Remote Stream
                 </button>
             </header>
         </div>
