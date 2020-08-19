@@ -86,136 +86,129 @@ function App() {
                                 Janus.debug(" ::: Got a message (publisher) :::", msg);
                                 const event = msg["videoroom"];
                                 Janus.debug("Event: " + event);
-                                if (event) {
-                                    switch (event) {
-                                        case "joined":
-                                            myid = msg["id"];
-                                            mypvtid = msg["private_id"];
-                                            Janus.log("Successfully joined room " + msg["room"] + " with ID " + myid);
-                                            const configuration = {
-                                                // Add data:true here if you want to publish datachannels as well
-                                                media: {
-                                                    audioRecv: false,
-                                                    videoRecv: false,
-                                                    audioSend: true,
-                                                    videoSend: true
-                                                },
-                                                simulcast: true,
-                                                simulcast2: true,
-                                                success: (jsep) => {
-                                                    Janus.debug("Got publisher SDP!", jsep);
-                                                    const publish = {
-                                                        request: "configure",
-                                                        audio: true,
-                                                        video: true
-                                                    };
-                                                    sfutest.send({ message: publish, jsep: jsep });
-                                                },
-                                                error: (error) => {
-                                                    Janus.error("WebRTC error:", error);
+
+                                switch (event) {
+                                    case "joined":
+                                        mypvtid = msg["private_id"];
+                                        Janus.log("Successfully joined room " + msg["room"] + " with ID " + msg["id"]);
+                                        const configuration = {
+                                            // Add data:true here if you want to publish datachannels as well
+                                            media: {
+                                                audioRecv: false,
+                                                videoRecv: false,
+                                                audioSend: true,
+                                                videoSend: true
+                                            },
+                                            simulcast: true,
+                                            simulcast2: true,
+                                            success: (jsep) => {
+                                                Janus.debug("Got publisher SDP!", jsep);
+                                                const publish = {
+                                                    request: "configure",
+                                                    audio: true,
+                                                    video: true
+                                                };
+                                                sfutest.send({ message: publish, jsep: jsep });
+                                            },
+                                            error: (error) => {
+                                                Janus.error("WebRTC error:", error);
+                                            }
+                                        }
+                                        sfutest.createOffer(configuration);
+                                        // Any new feed to attach to?
+                                        if (msg["publishers"]) {
+                                            const list = msg["publishers"];
+                                            Janus.debug("Got a list of available publishers/feeds:", list);
+                                            for (const feed in list) {
+                                                newRemoteFeed(feed);
+                                            }
+                                        }
+                                        break;
+                                    case "destroyed":
+                                        Janus.warn("The room has been destroyed!");
+                                        break;
+                                    case "event":
+                                        Janus.warn("The room has been destroyed!");
+                                        const { publishers, leaving, unpublished } = msg
+                                        // Any new feed to attach to?
+                                        if (publishers) {
+                                            Janus.debug("Got a list of available publishers/feeds:", publishers);
+                                            for (const feed in publishers) {
+                                                newRemoteFeed(feed);
+                                            }
+                                        } else if (leaving) {
+                                            // One of the publishers has gone away?
+                                            Janus.log("Publisher left: " + leaving);
+                                            let remoteFeed = null;
+                                            for (let i = 1; i < roomCapacity; i++) {
+                                                if (feeds[i] && feeds[i].rfid === leaving) {
+                                                    remoteFeed = feeds[i];
+                                                    break;
                                                 }
                                             }
-                                            sfutest.createOffer(configuration);
-                                            // Any new feed to attach to?
-                                            if (msg["publishers"]) {
-                                                const list = msg["publishers"];
-                                                Janus.debug("Got a list of available publishers/feeds:", list);
-                                                for (const f in list) {
-                                                    const id = list[f]["id"];
-                                                    const display = list[f]["display"];
-                                                    const audio = list[f]["audio_codec"];
-                                                    const video = list[f]["video_codec"];
-                                                    // Janus.debug("  >> [" + id + "] " + display + " (audio: " + audio + ", video: " + video + ")");
-                                                    newRemoteFeed(id, display, audio, video);
+                                            if (remoteFeed) {
+                                                Janus.debug("Feed " + remoteFeed.rfid + " (" + remoteFeed.rfdisplay + ") has left the room, detaching");
+                                                feeds[remoteFeed.rfindex] = null;
+                                                remoteFeed.detach();
+                                            }
+                                        } else if (unpublished) {
+                                            // One of the publishers has unpublished?
+                                            Janus.log("Publisher left: " + unpublished);
+                                            if (unpublished === 'ok') {
+                                                // That's us
+                                                sfutest.hangup();
+                                                return;
+                                            }
+                                            let remoteFeed;
+                                            for (let i = 1; i < roomCapacity; i++) {
+                                                if (feeds[i] && feeds[i].rfid === unpublished) {
+                                                    remoteFeed = feeds[i];
+                                                    break;
                                                 }
                                             }
-                                            break;
-                                        case "destroyed":
-                                            Janus.warn("The room has been destroyed!");
-                                            break;
-                                        case "event":
-                                            Janus.warn("The room has been destroyed!");
-                                            const { publishers, leaving, unpublished } = msg
-                                            // Any new feed to attach to?
-                                            if (publishers) {
-                                                Janus.debug("Got a list of available publishers/feeds:", publishers);
-                                                for (const item in publishers) {
-                                                    const { id, display, audio_codec, video_codec } = publishers[item]
-                                                    newRemoteFeed(id, display, audio_codec, video_codec);
-                                                }
-                                            } else if (leaving) {
-                                                // One of the publishers has gone away?
-                                                Janus.log("Publisher left: " + leaving);
-                                                let remoteFeed = null;
-                                                for (let i = 1; i < roomCapacity; i++) {
-                                                    if (feeds[i] && feeds[i].rfid === leaving) {
-                                                        remoteFeed = feeds[i];
-                                                        break;
-                                                    }
-                                                }
-                                                if (remoteFeed) {
-                                                    Janus.debug("Feed " + remoteFeed.rfid + " (" + remoteFeed.rfdisplay + ") has left the room, detaching");
-                                                    feeds[remoteFeed.rfindex] = null;
-                                                    remoteFeed.detach();
-                                                }
-                                            } else if (unpublished) {
-                                                // One of the publishers has unpublished?
-                                                Janus.log("Publisher left: " + unpublished);
-                                                if (unpublished === 'ok') {
-                                                    // That's us
-                                                    sfutest.hangup();
-                                                    return;
-                                                }
-                                                let remoteFeed = null;
-                                                for (let i = 1; i < roomCapacity; i++) {
-                                                    if (feeds[i] && feeds[i].rfid === unpublished) {
-                                                        remoteFeed = feeds[i];
-                                                        break;
-                                                    }
-                                                }
-                                                if (remoteFeed) {
-                                                    Janus.debug("Feed " + remoteFeed.rfid + " (" + remoteFeed.rfdisplay + ") has left the room, detaching");
-                                                    feeds[remoteFeed.rfindex] = null;
-                                                    remoteFeed.detach();
-                                                }
-                                            } else if (msg["error"]) {
-                                                if (msg["error_code"] === 426) {
-                                                    // This is a "no such room" error: give a more meaningful description
-                                                    const createRoomConfig = {
-                                                        request: "create",
-                                                        room: myroom,
-                                                        // <unique numeric ID, optional, chosen by plugin if missing>,
-                                                        notify_joining: true,
-                                                        bitrate: 128000,
-                                                        publishers: roomCapacity, // default is 3,
-                                                        record: false, // deside record video stream or not
-                                                        // rec_dir: '/path/to/recordings-folder/',
-                                                        // other property could refer to Video Room API https://janus.conf.meetecho.com/docs/videoroom.html
-                                                    }
-                                                    sfutest.send({ message: createRoomConfig });
-                                                } else {
-                                                    console.log(msg["error"])
-                                                }
+                                            if (remoteFeed) {
+                                                Janus.debug("Feed " + remoteFeed.rfid + " (" + remoteFeed.rfdisplay + ") has left the room, detaching");
+                                                feeds[remoteFeed.rfindex] = null;
+                                                remoteFeed.detach();
                                             }
-                                            if (jsep) {
-                                                Janus.debug("Handling SDP as well...", jsep);
-                                                sfutest.handleRemoteJsep({ jsep: jsep });
-                                                // Check if any of the media we wanted to publish has
-                                                // been rejected (e.g., wrong or unsupported codec)
-                                                let audio = msg["audio_codec"];
-                                                if (localStream && localStream.getAudioTracks() && localStream.getAudioTracks().length > 0 && !audio) {
-                                                    // Audio has been rejected
-                                                    console.warning("Our audio stream has been rejected, viewers won't hear us");
+                                        } else if (msg["error"]) {
+                                            if (msg["error_code"] === 426) {
+                                                // This is a "no such room" error: give a more meaningful description
+                                                const createRoomConfig = {
+                                                    request: "create",
+                                                    room: myroom,
+                                                    // <unique numeric ID, optional, chosen by plugin if missing>,
+                                                    notify_joining: true,
+                                                    bitrate: 128000,
+                                                    publishers: roomCapacity, // default is 3,
+                                                    record: false, // deside record video stream or not
+                                                    // rec_dir: '/path/to/recordings-folder/',
+                                                    // other property could refer to Video Room API https://janus.conf.meetecho.com/docs/videoroom.html
                                                 }
-                                                let video = msg["video_codec"];
-                                                if (localStream && localStream.getVideoTracks() && localStream.getVideoTracks().length > 0 && !video) {
-                                                    // Video has been rejected
-                                                    console.warning("Our video stream has been rejected, viewers won't see us");
-                                                }
+                                                sfutest.send({ message: createRoomConfig });
+                                            } else {
+                                                console.log(msg["error"])
                                             }
-                                            break;
-                                    }
+                                        }
+                                        if (jsep) {
+                                            Janus.debug("Handling SDP as well...", jsep);
+                                            sfutest.handleRemoteJsep({ jsep: jsep });
+                                            // Check if any of the media we wanted to publish has
+                                            // been rejected (e.g., wrong or unsupported codec)
+                                            let audio = msg["audio_codec"];
+                                            if (localStream && localStream.getAudioTracks() && localStream.getAudioTracks().length > 0 && !audio) {
+                                                // Audio has been rejected
+                                                console.warning("Our audio stream has been rejected, viewers won't hear us");
+                                            }
+                                            let video = msg["video_codec"];
+                                            if (localStream && localStream.getVideoTracks() && localStream.getVideoTracks().length > 0 && !video) {
+                                                // Video has been rejected
+                                                console.warning("Our video stream has been rejected, viewers won't see us");
+                                            }
+                                        }
+                                        break;
                                 }
+
                             },
                             onlocalstream: function (stream) {
                                 setLocalStream(stream)
@@ -237,8 +230,7 @@ function App() {
                 },
             });
     }
-    const newRemoteFeed = (id, display, audio, video) => {
-        // A new feed has been published, create a new plugin handle and attach to it as a subscriber
+    const newRemoteFeed = ({ id, display, audio_codec, video_codec }) => {
         let remoteFeed = null;
         janus.attach(
             {
@@ -259,14 +251,14 @@ function App() {
                     // subscribe["offer_video"] = false;
                     // For example, if the publisher is VP8 and this is Safari, let's avoid video
                     if (Janus.webRTCAdapter.browserDetails.browser === 'safari'
-                        && (video === 'vp9' || (video === 'vp8' && !Janus.safariVp8))) {
-                        if (video) {
-                            video = video.toUpperCase();
+                        && (video_codec === 'vp9' || (video_codec === 'vp8' && !Janus.safariVp8))) {
+                        if (video_codec) {
+                            video_codec = video_codec.toUpperCase();
                         }
                         // toastr.warning("Publisher is using " + video + ", but Safari doesn't support it: disabling video");
                         subscribe.offer_video = false;
                     }
-                    remoteFeed.videoCodec = video;
+                    remoteFeed.videoCodec = video_codec;
                     remoteFeed.send({ message: subscribe });
                 },
                 error: (error) => {
@@ -276,10 +268,10 @@ function App() {
                 onmessage: (msg, jsep) => {
                     const event = msg.videoroom;
                     Janus.log('[VideoRoom][Remote] ::: Got a message (publisher) :::', msg, event);
-                    if(event === "attached") {
+                    if (event === "attached") {
                         // Subscriber created and attached
-                        for(var i=1;i<6;i++) {
-                            if(!feeds[i]) {
+                        for (var i = 1; i < 6; i++) {
+                            if (!feeds[i]) {
                                 feeds[i] = remoteFeed;
                                 remoteFeed.rfindex = i;
                                 break;
@@ -378,7 +370,7 @@ function App() {
                     )
                 })}
                 <button onClick={() => {
-                    setTemp(true)
+                    setTemp(!temp)
                 }}>Get Remote Stream
                 </button>
             </header>
